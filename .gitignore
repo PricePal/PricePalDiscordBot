@@ -1,4 +1,11 @@
+# Virtual Environment
+CS153/
+
+# Environment Variables
 .env
+
+# Python
 __pycache__/
+*.pyc
 .DS_Store
 .venv/
