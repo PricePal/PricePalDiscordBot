@@ -2,3 +2,7 @@ discord.py
 openai
 mistralai
 python-dotenv
+json
+google-search-results
+pydantic
+aiohttp

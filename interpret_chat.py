@@ -1,70 +1,82 @@
 import os
-import openai
+from openai import AsyncOpenAI
+
+
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY not set in environment.")
 
 
-def interpret_chat(messages):
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+
+async def interpret_chat(messages):
     """
     Input: List of recent messages (strings)
-    Output: Parsed query as a dictionary
+    Output: Parsed query as a dictionary:
+      e.g. {
+        "item": "wireless headphones",
+        "type": "electronics",
+        "price_range": "50-100",
+        "number_of_results": 3
+      }
+      or { "item": None } if no shopping intent
     """
-
-    # Join messages into a single string
+    # Join messages into one context
     context = "\n".join(messages)
 
-    # Define LLM prompt for extracting a search query
     prompt = f"""
     You are a shopping assistant that extracts product search queries from chat conversations.
 
-    Here is the recent conversation:
+    Recent conversation:
     {context}
 
-    If there is a shopping-related intent (e.g., someone wants to buy something), generate a search query with the following format:
-    {{ "item": "<product name>", "type": "<category>", "price_range": "<price range or None>", "number_of_results": 3 }}
+    Your task:
+    1. If there is a shopping-related intent (i.e., someone wants to buy something), return a JSON with the following keys:
+      - "item": a specific product name. Feel free to add adjectives to enhance specificity. For example:
+          - If the user says "I want a pair of shoes that I can run in", you can return "running shoes".
+          - If the user says "I want a pair of shoes that are comfortable", you can return "comfortable shoes".
+          - If the user says "another, black ski mask thats scary", you can return "scary black ski mask".
+      - "type": the product category (e.g., "electronics", "clothing", etc.) or None if not applicable.
+      - "price_range": the price range as mentioned in the conversation (e.g., "0 - 100") or None if not specified.
+      - "number_of_results": the number of search results. Default is 3 and must never be 1. If the user specifies a quantity (e.g., "I'm looking for 5 pairs of shoes"), use that number.
 
-    If there is **no shopping intent**, simply return:
-    {{ "item": null }}
+    2. If there is no shopping-related intent in the conversation, simply return:
+      {{
+        "item": null
+      }}
 
     Examples:
-    Chat: "I'm looking for wireless headphones, any suggestions?"
-    Output: {{ "item": "wireless headphones", "type": "electronics", "price_range": "50-200", "number_of_results": 3 }}
+    - Chat: "I'm looking for wireless headphones, any suggestions?"
+      Output: {{ "item": "wireless headphones", "type": "electronics", "price_range": "50-200", "number_of_results": 3 }}
 
-    If the user mentions a specific price range, include it in the output.
-    Chat: "I'm looking for headphones under $100"
-    Output: {{ "item": "headphones", "type": "electronics", "price_range": "0 - 100", "number_of_results": 3 }}
+    - Chat: "I'm looking for headphones under $100"
+      Output: {{ "item": "headphones", "type": "electronics", "price_range": "0 - 100", "number_of_results": 3 }}
 
-    If the user mentions a specific amount of items, include it in the output.
-    Chat: "I'm looking for 5 pairs of shoes"
-    Output: {{ "item": "shoes", "type": "clothing", "price_range": "100-200", "number_of_results": 5 }}
+    - Chat: "I'm looking for 5 pairs of shoes"
+      Output: {{ "item": "shoes", "type": "clothing", "price_range": "100-200", "number_of_results": 5 }}
 
-    The number of results should be 3 by default and never 1
-    
-    Chat: "Anyone played Valorant today?"
-    Output: {{ "item": null }}
+    - Chat: "Anyone played Valorant today?"
+      Output: {{ "item": null }}
 
-    Now, analyze the chat above and return the correct output:
+    Now, analyze the conversation above and return the correct output.
     """
 
-    # Call LLM API
-    response = openai.ChatCompletion.create(
-        model="gpt-4", 
+    try:
+        response = await client.chat.completions.create(model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": "You are a helpful shopping assistant."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.3,
-    )
+        temperature=0.3)
 
-    # Extract the result from the LLM response
-    result_text = response['choices'][0]['message']['content'].strip()
-
-    # You can improve parsing here later, but for now:
-    try:
-        query = eval(result_text)  # Quick and dirty for now, switch to json.loads() later
-    except:
-        query = {"item": None}
-
-    return query
+        result_text = response.choices[0].message.content.strip()
+        query = json.loads(result_text)
+        return query
+    except Exception as e:
+        print(f"Interpret Chat Error: {e}")
+        return {"item": None}
