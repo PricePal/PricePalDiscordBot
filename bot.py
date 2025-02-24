@@ -149,9 +149,3 @@ async def find(ctx: commands.Context, *, query: str):
 
 
 bot.run(TOKEN)
-
-
-
-
-bot.run("YOUR_BOT_TOKEN")
-
