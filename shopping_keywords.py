@@ -3,7 +3,7 @@ import re
 # A more comprehensive list of shopping-related keywords and phrases.
 SHOPPING_KEYWORDS = [
   # General shopping and purchase terms
-    "buy", "purchase", "order", "shop", "shopping", "ecommerce", "e-commerce",
+    "buy", "purchase", "order", "shop", "shopping", "ecommerce", "e-commerce", 
     "retail", "wholesale", "online shopping", "order online", "buy online", "cart", "checkout",
     
      # Price and deals
@@ -22,6 +22,8 @@ SHOPPING_KEYWORDS = [
     "get a new", "need", "looking for", "in search of", "hunt for", "scouting", "seeking", "want",
     "buy now", "order now", "grab yours", "act now", "limited offer", "today only", "while supplies last",
     "exclusive deal", "must have", "don’t miss", "shop now", "instant savings", "get it now", "final sale",
+    "find", "find a", "find a good", "find a good deal", "find a good deal on", "find a good deal on", "getting",
+    "getting a", "getting a good", "getting a good deal", "getting a good deal on", "getting a good deal on",
     
     # Additional phrases indicating shopping interest
     "compare", "review", "shop around", "find a good deal", "sale event", "flash sale", "daily deals",

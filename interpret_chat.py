@@ -72,6 +72,7 @@ async def interpret_chat(messages):
             {"role": "system", "content": "You are a helpful shopping assistant."},
             {"role": "user", "content": prompt},
         ],
+        response_format={"type": "json_object"},
         temperature=0.3)
 
         result_text = response.choices[0].message.content.strip()
