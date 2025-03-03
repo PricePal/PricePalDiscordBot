@@ -1,313 +1,61 @@
-import os
-import json
-from openai import AsyncOpenAI
-from typing import List, Union
-from pydantic import BaseModel
-from serpapi import GoogleSearch 
+from typing import List, Union, Dict
 from dotenv import load_dotenv
+from services.openai_service import OpenAIService
+from services.search_service import SearchService
+from models.shopping_models import ShoppingItem, Recommendation
+from config import OPENAI_MODEL, OPENAI_API_KEY, SERP_API_KEY
 
 load_dotenv()
 
-openai_model_choice = "gpt-4o-mini"
-
-# Pydantic models for structured responses
-class ShoppingItem(BaseModel):
-    item_name: str
-
-class Recommendation(BaseModel):
-    item_name: str
-    price: str | None
-    link: str | None
-    source: str | None
-
-class StructuredResponse(BaseModel):
-    recommendations: List[ShoppingItem]
-
 class PromptedResponse:
-    def __init__(self):
-
-        self.SERP_API_KEY = os.getenv("SERP_API_KEY")
-        if not self.SERP_API_KEY:
-            raise ValueError("SERP_API_KEY not set in environment.")
-        
-        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-        if not self.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not set in environment.")
-        
-        self.client = AsyncOpenAI(api_key=self.OPENAI_API_KEY)
+    def __init__(self, openai_service=None, search_service=None):
+        # Dependency injection for better testability
+        self.openai_service = openai_service or OpenAIService(api_key=OPENAI_API_KEY)
+        self.search_service = search_service or SearchService(api_key=SERP_API_KEY)
        
-
-    async def parse_query(self, query_str: str) -> dict:
+    async def parse_query(self, query_str: str) -> Dict:
         """
-        Uses the OpenAI API to parse a plain text query into a structured JSON object with the format:
-        {
-        "item_name": "<product name>",
-        "type": "<category or None>",
-        "price_range": "<price range or None>",
-        "number_of_results": <number>
-        }
-        price_range is a string in the format of "0-100" or "100-200" or "200-300" etc.
-        number_of_results is an integer.
-        This method handles edge cases where the query might be very simple (e.g., "ski mask")
-        by filling in default values.
+        Uses the OpenAI API to parse a plain text query into a structured JSON object.
         """
-        prompt = (
-        "You are a text parser. Convert the following query into a JSON object with the following structure:\n"
-        "{\n"
-        '  "item_name": "<product name>",\n'
-        '  "type": "<category or None>",\n'
-        '  "price_range": "<price range or None>",\n'
-        '  "number_of_results": <number>\n'
-        "}\n\n"
-        "Feel free to add adjectives to the item name to make it more specific. For instance:\n"
-        "- If the query is \"I want a pair of shoes that I can run in\", output \"running shoes\".\n"
-        "- If the query is \"I want a pair of shoes that are comfortable\", output \"comfortable shoes\".\n"
-        "- If the query is \"black ski mask that's scary\", output \"scary black ski mask\".\n\n"
-        "For example, if the query is \"find a ski mask that is within 30 to 50 dollars, return 10 examples\", "
-        "the output might be:\n"
-        "{\n"
-        '  "item_name": "ski mask",\n'
-        '  "type": null,\n'
-        '  "price_range": "30-50",\n'
-        '  "number_of_results": 10\n'
-        "}\n\n"
-        "If the query is simple (like \"ski mask\"), return a JSON object with 'item_name' set to the query, "
-        "'type' and 'price_range' as null, and 'number_of_results' as 3.\n\n"
-        f"Now parse the following query and return only the JSON:\n{query_str}"
-        )
+        return await self.openai_service.parse_query(query_str)
 
-        
-
-        try: 
-            response = await self.client.chat.completions.create(
-            model=openai_model_choice,  
-            messages=[
-                {"role": "system", "content": "You are a helpful text parser."},
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            # max_tokens=200,
-            )
-            content = response.choices[0].message.content
-            # print(f"API Response: {content}")
-            parsed = json.loads(content)
-            if "item_name" not in parsed or not parsed["item_name"]:
-                parsed["item_name"] = query_str.strip()
-            if "type" not in parsed:
-                parsed["type"] = None
-            if "price_range" not in parsed:
-                parsed["price_range"] = None
-            if "number_of_results" not in parsed:
-                parsed["number_of_results"] = 3
-            return parsed
-        
-        except json.JSONDecodeError:
-            print("Error: Failed to parse JSON from OpenAI response.")
-            return {}
-        except Exception as e:
-            print(f"Parse Query Error: {e}")
-            return {}
-
-
-
-    async def get_recommendations(self, query: dict) -> List[ShoppingItem]:
-            """
-            Uses the OpenAI API to generate a specified number of item recommendations in a JSON array.
-            The 'query' dict should contain:
-                "item_name": <product name>,
-                "type": <category or None>,
-                "price_range": <price range or None>,
-                "number_of_results": <number of results to return>
-            
-            """
-            number_of_results = query.get("number_of_results", 3)
-            customer_request = (
-                f"Item_Name: {query.get('item_name')}, "
-                f"Type: {query.get('type', 'None')}, "
-                f"Price Range: {query.get('price_range', 'None')}, "
-                f"Number of Results: {number_of_results}"
-            )
-
-            prompt = (
-                "You are an expert shopping assistant. Given the following customer request, "
-                f"provide exactly {number_of_results} item recommendations as a JSON array. "
-                "Each recommendation should be a JSON object with a single field 'item_name' representing the item name. "
-                "Return only the JSON without any additional commentary.\n\n"
-                f"Customer request: {customer_request}"
-            )
-
-            try:
-                response = await self.client.chat.completions.create(
-                    model=openai_model_choice,  
-                    messages=[
-                        {"role": "system", "content": "You are an expert shopping assistant that returns valid json."},
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=300,
-                    temperature=0.3
-                )
-
-                # print(f"API Response: {response}")
-
-                # Extract the message content from the API response.
-                # Use dictionary indexing assuming the response is a dict.
-                content = response.choices[0].message.content.strip()
-
-                # Remove markdown code fences if present.
-                if content.startswith("```"):
-                    content = content.strip("```").strip()
-                    # If the language tag is included (e.g., "json"), remove it.
-                    if content.lower().startswith("json"):
-                        content = content[4:].strip()
-
-                # Parse the JSON into your StructuredResponse model.
-                parsed = json.loads(content)
-
-                if isinstance(parsed, list):
-                    parsed = {"recommendations": parsed}
-                print(f"Parsed: {parsed}")
-
-                structured_response = StructuredResponse.model_validate(parsed)
-                return structured_response.recommendations
-
-            except json.JSONDecodeError:
-                print("Error: Failed to parse JSON from OpenAI response.")
-                return []
-            except Exception as e:
-                print(f"Get Recommendations Error: {e}")
-                return []
-
-    def web_search_tool(self, item_name: str, region: str, price_range: str = None) -> str:
+    async def get_recommendations(self, query: Dict) -> List[ShoppingItem]:
         """
-        Searches Google Shopping for the given item and returns a formatted string with purchase options.
-        If a price_range is provided (e.g., "30-50"), it modifies the search query accordingly.
+        Uses the OpenAI API to generate a specified number of item recommendations.
         """
-        q = item_name
-        if price_range and price_range.lower() != "none":
-            parts = price_range.split('-')
-            if len(parts) == 2:
-                q += f" between {parts[0].strip()} and {parts[1].strip()} dollars"
-            else:
-                q += f" {price_range}"
+        return await self.openai_service.get_recommendations(query)
 
-        params = {
-            "engine": "google_shopping",
-            "q": q,
-            "gl": region,
-            "api_key": self.SERP_API_KEY
-        }
-
-        search = GoogleSearch(params)
-        results = search.get_dict()
-        # print(f"Results: {results}")
-        shopping_results = results.get("shopping_results", [])
-        if not shopping_results or len(shopping_results) == 0:
-            print(f"No shopping results found for {item_name} in {region} with price range {price_range}")
-            return "No shopping results found."
-
-        output = []
-        for result in shopping_results:
-            title = result.get("title", "N/A")
-            link = result.get("link") or result.get("product_link", "N/A")
-            price = result.get("price", "N/A")
-            source = result.get("source", "N/A")
-            output.append(
-                f"Title: {title}\nLink: {link}\nPrice: {price}\nSource: {source}\n{'-' * 40}"
-            )
-        return "\n".join(output)
-
-    async def process_web_results(self, items: List[ShoppingItem], purchase_options: dict) -> List[dict]:
+    async def process_web_results(self, items: List[ShoppingItem], purchase_options: Dict) -> List[Recommendation]:
         """
-        Uses the OpenAI API to process purchase options for each item.
-        Instruct the model to return a JSON array where each element is an object with the following keys:
-        'item', 'price', 'link', and 'source'.
+        Processes purchase options for each item and returns best recommendations.
         """
-        prompt = (
-            "You are an expert shopping assistant. For each of the following items, "
-            "select the best purchase option from the provided options based solely on the given data. "
-            "The key for this array is 'results', very important that this is always the case"
-            "Return a JSON array where each element is a JSON object with the keys: "
-            "'item_name', 'price', 'link', and 'source'. "
-            "If there are no options, still return each item as an element in the array, just have the item_name be the item name, and the price, link, and source be None."
-            "Return only the JSON array without any additional commentary.\n\n"
-        )
-        for item in items:
-            item_name = item.item_name
-            print(f"purchase_options: {purchase_options}")
-            options = purchase_options.get(item_name, "No options found.")
-            print(f"Options: {options}")
-            prompt += f"Item: {item_name}\nPurchase Options:\n{options}\n\n"
+        return await self.openai_service.process_web_results(items, purchase_options)
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=openai_model_choice,
-                messages=[
-                    {"role": "system", "content": "You are an expert shopping assistant that returns valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"},
-                max_tokens=400,
-                temperature=0.3
-            )
-
-            content = response.choices[0].message.content.strip()
-            print(f"Content: {content}")
-            if content.startswith("```"):
-                content = content.strip("```").strip()
-                if content.lower().startswith("json"):
-                    content = content[4:].strip()
-
-            recommendations = json.loads(content)
-            print(f"Final Recommendations: {recommendations}")
-            # print(recommendations)
-            # Handle both a raw JSON array and a JSON object with key "results"
-            if isinstance(recommendations, dict):
-                if "results" in recommendations and isinstance(recommendations["results"], list):
-                    recommendations = recommendations["results"]
-                else:
-                    raise ValueError("Expected a JSON array or an object with a 'results' key")
-            if not isinstance(recommendations, list):
-                raise ValueError("Expected a JSON array")
-            
-            # Convert each recommendation into a Recommendation model
-            final_recommendations = []
-            for rec in recommendations:
-                try:
-                    final_recommendations.append(Recommendation(**rec))
-                except Exception as e:
-                    print(f"Error validating recommendation: {e}")
-            return final_recommendations
-
-        except Exception as e:
-            print(f"Process Web Results Error: {e}")
-            return []
-
-
-    async def run_prompted_response(self, query: Union[str, dict], region: str) -> str:
+    async def run_prompted_response(self, query: Union[str, Dict], region: str) -> List[Recommendation]:
         """
-        Given a customer query (either a plain string or a structured dictionary) and a region, this function:
-        1. Uses NLP to parse a plain text query into a structured format if needed.
-        2. Retrieves item recommendations.
-        3. For each item, searches for purchase options (using the price range if provided).
-        4. Processes the web search results to select the best purchase option for each item.
-        5. Returns the final purchase recommendations as a string.
+        Main workflow method that orchestrates the entire recommendation process.
         """
+        # Step 1: Parse query if it's a string
         if isinstance(query, str):
-            # Use NLP to parse the plain text query into our desired JSON structure
             query_dict = await self.parse_query(query)
         else:
             query_dict = query
 
-        # Step 1: Get item recommendations using the structured query
+        # Step 2: Get recommended items
         recommendations = await self.get_recommendations(query_dict)
-        print(f"Recommendations: {recommendations}")
-
-        # Step 2: For each recommended item, get purchase options using the price range.
+        
+        # Step 3: Search for purchase options for each recommendation
         purchase_options = {}
         for item in recommendations:
-            options = self.web_search_tool(item.item_name, region, query_dict.get("price_range"))
+            # options = ""
+            options = self.search_service.search_shopping(
+                item_name=item.item_name,
+                region=region,
+                price_range=query_dict.get("price_range")
+            )
+
             purchase_options[item.item_name] = options
 
-        # Step 3: Process the web search results to select the best purchase option for each item.
+        # Step 4: Process results to select the best options
         final_results = await self.process_web_results(recommendations, purchase_options)
         return final_results

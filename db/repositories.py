@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from DB_management.models import User, Query, RecommendedItem, Reaction
+from db.models import User, Query, RecommendedItem, Reaction
 
 # --------------- USER REPOSITORY ---------------
 def create_or_get_user(db: Session, discord_id: str, username: str) -> User:

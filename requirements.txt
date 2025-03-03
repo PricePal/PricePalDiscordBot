@@ -2,7 +2,14 @@ discord.py
 openai
 mistralai
 python-dotenv
-json
 google-search-results
 pydantic
 aiohttp
+sqlalchemy
+psycopg2
+beautifulsoup4
+Pillow
+requests
+urllib3
+fastapi
+uvicorn
