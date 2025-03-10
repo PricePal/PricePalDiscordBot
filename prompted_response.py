@@ -19,6 +19,18 @@ class PromptedResponse:
         """
         return await self.openai_service.parse_query(query_str)
 
+    async def parse_multi_item_query(self, query_str: str) -> Dict:
+        """
+        Uses the OpenAI API to parse a plain text query into a structured JSON object.
+        """
+        return await self.openai_service.parse_multi_item_query(query_str)
+    
+    async def generate_surprise_recommendation(self, message_context: List[str]) -> str:
+        """
+        Analyzes chat context and suggests a surprising but relevant item.
+        """
+        return await self.openai_service.generate_surprise_recommendation(message_context)
+
     async def get_recommendations(self, query: Dict) -> List[ShoppingItem]:
         """
         Uses the OpenAI API to generate a specified number of item recommendations.

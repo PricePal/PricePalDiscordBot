@@ -1,8 +1,8 @@
 # DB_test.py
 
-from DB_management.database import SessionLocal, engine
-from DB_management.models import Base
-from DB_management.repositories import (
+from db.database import SessionLocal, engine
+from db.models import Base
+from db.repositories import (
     create_or_get_user, get_user_by_discord_id,
     create_query, create_recommended_item, create_reaction
 )

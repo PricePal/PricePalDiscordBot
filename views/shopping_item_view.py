@@ -25,6 +25,7 @@ class ShoppingItemView(View):
             await interaction.response.send_message("Added to your wishlist!", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
+            print(f"Wishlist error: {e}")
 
     @discord.ui.button(label="Dislike", style=discord.ButtonStyle.danger, emoji="👎")
     async def on_dislike_click(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -33,3 +34,4 @@ class ShoppingItemView(View):
             await interaction.response.send_message("You disliked this item.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
+            print(f"Dislike error: {e}")

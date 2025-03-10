@@ -66,3 +66,20 @@ def create_reaction(db: Session, query_id: str, recommended_item_id: str, reacti
 
 def get_reactions_for_query(db: Session, query_id: str):
     return db.query(Reaction).filter(Reaction.query_id == query_id).all()
+
+
+# Add this function to retrieve wishlist items
+def get_wishlist_items_for_user(db: Session, user_id: str):
+    """
+    Get all items that a user has added to their wishlist.
+    """
+    # Join queries, reactions, and recommended_items tables to get all wishlist items
+    wishlist_items = (
+        db.query(RecommendedItem)
+        .join(Reaction, Reaction.recommended_item_id == RecommendedItem.id)
+        .join(Query, Query.id == Reaction.query_id)
+        .filter(Query.user_id == user_id)
+        .filter(Reaction.reaction_type == "wishlist")
+        .all()
+    )
+    return wishlist_items

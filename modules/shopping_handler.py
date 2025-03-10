@@ -102,8 +102,8 @@ class ShoppingHandler:
                         shopping_item.item_name, 
                         shopping_item.price, 
                         shopping_item.link,
-                        query_id=None,
-                        rec_item_id=None
+                        query_id=unprompted_query.id,
+                        rec_item_id=rec_item.id
                     )
             else:
                 await message.channel.send("No recommendations found.")

@@ -3,7 +3,6 @@ from openai import AsyncOpenAI
 from config import OPENAI_API_KEY
 
 import json
-from dotenv import load_dotenv
 
 
 
@@ -62,7 +61,7 @@ async def interpret_chat(messages):
     """
 
     try:
-        response = await client.chat.completions.create(model="gpt-3.5-turbo",
+        response = await client.chat.completions.create(model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful shopping assistant."},
             {"role": "user", "content": prompt},
