@@ -13,3 +13,5 @@ requests
 urllib3
 fastapi
 uvicorn
+numpy
+matplotlib

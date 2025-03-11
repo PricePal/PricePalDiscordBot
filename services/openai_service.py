@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 from openai import AsyncOpenAI
 from models.shopping_models import ShoppingItem, Recommendation, StructuredResponse
 from config import OPENAI_MODEL, REASONING_MODEL
+from db.models import Query, RecommendedItem, Reaction
 
 def strip_markdown(content: str) -> str:
     """Removes markdown code block delimiters from the response."""
@@ -358,3 +359,167 @@ class OpenAIService:
         except Exception as e:
             print(f"Surprise Recommendation Error: {e}")
             return "unexpected gadget"  # Fallback recommendation
+
+    async def generate_user_profile(self, user_history: dict) -> dict:
+        """
+        Analyzes a user's shopping history to generate a comprehensive shopping profile.
+        """
+        queries = user_history.get('queries', [])
+        items = user_history.get('items', [])
+        reactions = user_history.get('reactions', [])
+        
+        if not queries:
+            return {
+                "summary": "Not enough shopping history to generate a profile.",
+                "shopping_personality": {"type": "Casual Browser", "traits": ["New User"]},
+                "category_breakdown": {},
+                "price_range_preference": "Unknown",
+                "avg_price_interest": 0.0,
+                "activity_level": "New User",
+                "preferred_brands": [],
+                "recommendations": ["Try searching for products to build your profile!"]
+            }
+        
+        # Format the data for the AI to analyze
+        formatted_data = {
+            "queries": [
+                {
+                    "query": q["raw_query"],
+                    "interpreted": q["interpreted_query"],
+                    "date": q["created_at"].isoformat() if hasattr(q["created_at"], "isoformat") else str(q["created_at"])
+                } for q in queries
+            ],
+            "items": [
+                {
+                    "name": i["item_name"],
+                    "price": i["price"],
+                    "vendor": i["vendor"],
+                    "metadata": i["metadata"]
+                } for i in items
+            ],
+            "reactions": [
+                {
+                    "item_id": r["recommended_item_id"],
+                    "type": r["reaction_type"]
+                } for r in reactions
+            ]
+        }
+        
+        # Prepare the prompt for the AI
+        prompt = f"""
+        You are an expert shopping analyst. Analyze this user's shopping history and generate a comprehensive profile:
+        
+        {json.dumps(formatted_data, indent=2)}
+        
+        Create a detailed shopping profile with the following structure:
+        1. A brief summary of their shopping behavior (2-3 sentences)
+        2. Their shopping personality type (choose one: Bargain Hunter, Luxury Seeker, Practical Buyer, Trendsetter, Tech Enthusiast, Fashion Forward, Minimalist, Impulse Shopper, Research Master, Casual Browser) 
+        3. 3-5 specific traits that define their shopping behavior
+        4. A breakdown of product categories they're interested in (as percentages)
+        5. Their price range preference 
+        6. Average price point they're interested in
+        7. Their shopping activity level (Very Active, Active, Occasional, Rare)
+        8. Their preferred brands (if detectable)
+        9. 3-5 personalized product recommendations based on this profile, just the names of the products as strings in an array
+        
+        Return the analysis as a valid JSON object with these keys:
+        "summary", "shopping_personality" (with nested "type" and "traits" array), "category_breakdown" (category name to percentage), "price_range_preference", "avg_price_interest" (as a number), "activity_level", "preferred_brands" (array), "recommendations" (array of product suggestions)
+        It is essential that you return a valid JSON object. and just that
+        """
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.reasoning_model,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+            )
+            content = strip_markdown(response.choices[0].message.content)
+            profile_data = json.loads(content)
+            return profile_data
+        
+        except Exception as e:
+            print(f"Error in generating user profile: {str(e)}")
+            # Return a basic profile if there's an error
+            return {
+                "summary": "Based on your limited shopping history, you appear to be exploring various products.",
+                "shopping_personality": {"type": "Casual Browser", "traits": ["Exploratory", "Diverse Interests"]},
+                "category_breakdown": {"General": 100.0},
+                "price_range_preference": "Mid-range",
+                "avg_price_interest": 99.99,
+                "activity_level": "New User",
+                "preferred_brands": [],
+                "recommendations": ["Try searching for more specific products to get better recommendations!"]
+            }
+
+    def get_user_history(self, user_id):
+        """
+        Retrieves a user's complete shopping history from the database
+        """
+        # Get all queries by this user
+        queries = self.db.query(Query).filter(Query.user_id == user_id).all()
+        
+        # Get all recommended items associated with these queries
+        query_ids = [q.id for q in queries]
+        items = []
+        if query_ids:
+            items = self.db.query(RecommendedItem).filter(RecommendedItem.query_id.in_(query_ids)).all()
+        
+        # Get all reactions by this user
+        reactions = []
+        if query_ids:
+            reactions = self.db.query(Reaction).filter(Reaction.query_id.in_(query_ids)).all()
+        
+        # Format the data
+        formatted_queries = []
+        for query in queries:
+            formatted_queries.append({
+                'id': str(query.id),
+                'query_type': query.query_type,
+                'raw_query': query.raw_query,
+                'interpreted_query': query.interpreted_query,
+                'created_at': query.created_at
+            })
+        
+        formatted_items = []
+        for item in items:
+            try:
+                formatted_items.append({
+                    'id': str(item.id),
+                    'query_id': str(item.query_id),
+                    'item_name': item.item_name,
+                    'vendor': item.vendor,
+                    'price': float(item.price) if item.price else 0.0,
+                    'link': item.link,
+                    'metadata': item.item_metadata if hasattr(item, 'item_metadata') else {},
+                    'created_at': item.created_at
+                })
+            except Exception as e:
+                print(f"Error formatting item {item.id}: {str(e)}")
+                # Add a simpler version without the problematic fields
+                formatted_items.append({
+                    'id': str(item.id),
+                    'item_name': item.item_name,
+                    'price': 0.0,
+                    'vendor': item.vendor if hasattr(item, 'vendor') else "Unknown",
+                    'metadata': {}
+                })
+        
+        # Reactions remain unchanged
+        formatted_reactions = []
+        for reaction in reactions:
+            formatted_reactions.append({
+                'id': str(reaction.id),
+                'query_id': str(reaction.query_id),
+                'recommended_item_id': str(reaction.recommended_item_id) if reaction.recommended_item_id else None,
+                'reaction_type': reaction.reaction_type,
+                'created_at': reaction.created_at
+            })
+        
+        # Combine everything into a user history object
+        return {
+            'user_id': str(user_id),
+            'queries': formatted_queries,
+            'items': formatted_items,
+            'reactions': formatted_reactions
+        }

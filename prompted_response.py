@@ -25,6 +25,12 @@ class PromptedResponse:
         """
         return await self.openai_service.parse_multi_item_query(query_str)
     
+    async def generate_user_profile(self, user_history: List[Dict]) -> Dict:
+        """
+        Uses the OpenAI API to generate a user profile based on their shopping history.
+        """
+        return await self.openai_service.generate_user_profile(user_history)
+    
     async def generate_surprise_recommendation(self, message_context: List[str]) -> str:
         """
         Analyzes chat context and suggests a surprising but relevant item.

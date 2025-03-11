@@ -51,11 +51,15 @@ async def recommended_item_embed(ctx: commands.Context | None, message: discord.
     print("Beginning recommended item embed")
     # Create an embed
     embed = discord.Embed(
-        title= item_name,
-        color=discord.Color.blue()
+        title=item_name,
+        url=link,  # Make the title clickable
+        description=f"**Price:** {price}",  # Move price to description for cleaner look
+        color=discord.Color.brand_green()  # Use a more appealing color
     )
-    embed.add_field(name="Price", value=price, inline=True)
-    embed.add_field(name="Link", value=link, inline=False)
+    
+    # Add link as a field with better formatting
+    formatted_link = f"[Click to view item]({link})"
+    embed.add_field(name="Product Link", value=formatted_link, inline=False)
     
     # Try to get image URL from the link if no image_url is provided
     print("Getting image from URL")
@@ -67,6 +71,10 @@ async def recommended_item_embed(ctx: commands.Context | None, message: discord.
     print("Adding image to embed")
     if image_url:
         embed.set_image(url=image_url)
+    
+    
+    # Add timestamp for freshness
+    embed.timestamp = discord.utils.utcnow()
 
     view = ShoppingItemView(query_id, rec_item_id)
     

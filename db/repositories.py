@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
 from db.models import User, Query, RecommendedItem, Reaction
+from sqlalchemy import text
+import json
 
 # --------------- USER REPOSITORY ---------------
 def create_or_get_user(db: Session, discord_id: str, username: str) -> User:
@@ -69,9 +71,17 @@ def get_reactions_for_query(db: Session, query_id: str):
 
 
 # Add this function to retrieve wishlist items
-def get_wishlist_items_for_user(db: Session, user_id: str):
+def get_wishlist_items_for_user(db: Session, user_id: str, limit: int = None):
     """
     Get all items that a user has added to their wishlist.
+    
+    Args:
+        db: Database session
+        user_id: The user's ID to get wishlist items for
+        limit: Optional maximum number of items to return
+        
+    Returns:
+        List of RecommendedItem objects in the user's wishlist
     """
     # Join queries, reactions, and recommended_items tables to get all wishlist items
     wishlist_items = (
@@ -80,6 +90,58 @@ def get_wishlist_items_for_user(db: Session, user_id: str):
         .join(Query, Query.id == Reaction.query_id)
         .filter(Query.user_id == user_id)
         .filter(Reaction.reaction_type == "wishlist")
-        .all()
+        .order_by(RecommendedItem.created_at.desc())
     )
-    return wishlist_items
+    
+    # Apply limit if provided
+    if limit is not None:
+        wishlist_items = wishlist_items.limit(limit)
+        
+    return wishlist_items.all()
+
+def get_recent_queries_by_user(db: Session, user_id: str, limit: int = 5):
+    """
+    Get the most recent queries for a specific user.
+    """
+    from db.models import Query
+    
+    return db.query(Query)\
+        .filter(Query.user_id == user_id)\
+        .order_by(Query.created_at.desc())\
+        .limit(limit)\
+        .all()
+
+def delete_all_recommendations_for_user(db: Session, user_id: str):
+    """
+    Deletes all existing recommendations for a user.
+    """
+    db.execute(
+        text("""
+        DELETE FROM recommendation_service_table 
+        WHERE user_id = :user_id
+        """),
+        {"user_id": user_id}
+    )
+    db.commit()
+
+def insert_recommendation_for_user(db: Session, user_id: str, item_name: str, vendor: str, 
+                                  link: str, price: float, metadata: dict):
+    """
+    Inserts a new recommendation for a user.
+    """
+    db.execute(
+        text("""
+        INSERT INTO recommendation_service_table
+        (user_id, item_name, vendor, link, price, metadata)
+        VALUES (:user_id, :item_name, :vendor, :link, :price, :metadata)
+        """),
+        {
+            "user_id": user_id,
+            "item_name": item_name,
+            "vendor": vendor,
+            "link": link,
+            "price": price,
+            "metadata": json.dumps(metadata)
+        }
+    )
+    db.commit()
