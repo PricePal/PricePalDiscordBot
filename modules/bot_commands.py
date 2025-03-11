@@ -1,6 +1,6 @@
 from discord.ext import commands
 from db.repositories import (
-    create_or_get_user, create_query, create_recommended_item, get_wishlist_items_for_user
+    create_or_get_user, create_query, create_recommended_item, get_wishlist_items_for_user, get_latest_recommendations_for_user
 )
 from sqlalchemy.orm import Session
 import discord
@@ -10,11 +10,12 @@ from modules.user_profile import UserProfileAnalyzer
 import matplotlib.pyplot as plt
 import io
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta        
 import numpy as np
 from utils.loading_animations import LoadingAnimations
 from utils.recommendation_service import RecommendationService
 import asyncio
+import traceback
 
 def register_commands(bot, db: Session):
     # Initialize the recommendation service
@@ -116,6 +117,13 @@ def register_commands(bot, db: Session):
                 # Log or retrieve the user
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
                 
+                # Create an embed with a loading animation
+                loading_embed, _ = LoadingAnimations.get_loading_embed(
+                    operation="search", 
+                    message=f"🛒 **Fetching complementary items for:** {query}\n\nFinding the perfect set of products that work well together..."
+                )
+                status_message = await ctx.send(embed=loading_embed)
+                
                 # Parse the query to get a set of items
                 interpreted_set = await prompted_response.parse_multi_item_query(query)
                 
@@ -128,27 +136,33 @@ def register_commands(bot, db: Session):
                     interpreted_query=interpreted_set
                 )
                 
-                status_message = await ctx.send("🛒 **Fetching complementary items...**")
                 region = "us"
                 
                 # Get recommendations for each item in the set (up to 4)
                 item_set = interpreted_set.get("items", [])[:4]  # Limit to 4 items
                 
                 if not item_set:
-                    await ctx.send("Couldn't identify items in your query. Try something like '!multi_search ski equipment'")
                     await status_message.delete()
+                    await ctx.send("Couldn't identify items in your query. Try something like '!multi_find ski equipment'")
                     return
                     
-                await ctx.send(f"Finding items for: **{', '.join(item_set)}**")
+                # Update the loading message with the identified items
+
+                updated_embed, _ = LoadingAnimations.get_loading_embed(
+                    operation="search",
+                    message=f"🛒 **Building Your Product Set**\n\nFinding the best options for: **{', '.join(item_set)}**"
+                )
+                await status_message.edit(embed=updated_embed)
                 
                 for item in item_set:
                     recommendations = await prompted_response.run_prompted_response(
-                        {"item_name": item, "number_of_results": 1},  # Just get 1 result per item
+                        item, 
                         region
                     )
                     
-                    if recommendations:
-                        shopping_item = recommendations[0]
+                    if recommendations and len(recommendations) > 0:
+                        shopping_item = recommendations[0]  # Take the first/best recommendation
+                        
                         # Store recommendation in database
                         rec_link = shopping_item.link if shopping_item.link is not None else ""
                         rec_price = float(shopping_item.price.replace('$', '').replace(",", "")) if shopping_item.price is not None else 0.0
@@ -172,13 +186,11 @@ def register_commands(bot, db: Session):
                             query_id=new_query.id,
                             rec_item_id=rec_item.id
                         )
-                    else:
-                        await ctx.send(f"No recommendations found for {item}.")
-                    
-                await status_message.delete()  # Remove the status message once done
+                
+                # Delete the loading message when all items are processed
+                await status_message.delete()
                 
                 # Trigger the background recommendation service
-                # This doesn't await the result, so it won't block execution
                 asyncio.create_task(recommendation_service.update_recommendations(db, user.id))
                 
             finally:
@@ -484,6 +496,10 @@ def register_commands(bot, db: Session):
                 emoji = "📊"
             elif command.name == "feeling_lucky":
                 emoji = "✨"
+            elif command.name == "all_commands":
+                emoji = "👀"
+            elif command.name == "my_recs":
+                emoji = "🛍️"
             elif command.name == "hello":
                 emoji = "👋"
             
@@ -500,3 +516,70 @@ def register_commands(bot, db: Session):
         
         # Send the embed
         await ctx.send(embed=embed)
+
+    @bot.command(name="my_recs")
+    async def my_recs(ctx: commands.Context):
+        """
+        Shows your personalized product recommendations based on your shopping history.
+        These are updated regularly based on your searches and wishlist items.
+        """
+        
+        # Send initial status message with loading animation
+        loading_embed, _ = LoadingAnimations.get_loading_embed(
+            operation="search", 
+            message="🔍 **Retrieving your recommendations...**\n\nFetching your personalized product suggestions."
+        )
+        status_message = await ctx.send(embed=loading_embed)
+        
+        try:
+            # Get the user
+            user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
+            
+            # Get recommendations for this user
+            recommendations = get_latest_recommendations_for_user(db, user.id)
+            
+            if not recommendations:
+                
+                    await status_message.delete()
+                    await ctx.send("I couldn't find enough shopping history to generate recommendations. Try using the `!find` command to search for some products first!")
+                    return
+            
+            # Create an embed for the recommendations
+            embed = discord.Embed(
+                title="🛍️ Your Personalized Recommendations",
+                description="Based on your shopping history and preferences, here are some products you might like:",
+                color=discord.Color.gold()
+            )
+            
+            # Add each recommendation to the embed
+            for i, rec in enumerate(recommendations[:6], 1):  # Limit to 6 recommendations
+                # Format price if available - FIXED: Use dictionary access instead of attribute access
+                price_text = f" - ${rec['price']}" if rec['price'] and float(rec['price']) > 0 else ""
+                
+                # Add field for each recommendation - FIXED: Use dictionary access
+                embed.add_field(
+                    name=f"{i}. {rec['item_name']}{price_text}",
+                    value=f"[View Product]({rec['link']})" if rec['link'] else "No link available",
+                    inline=False
+                )
+            
+            # Add tips at the bottom
+            embed.add_field(
+                name="Want better recommendations?",
+                value="Use `!find` and `!multi_find` to search for products and add more items to your wishlist to save items you like!",
+                inline=False
+            )
+            
+            # Add timestamp and footer
+            embed.timestamp = datetime.now()
+            embed.set_footer(text=f"Recommendations for {ctx.author.name}")
+            
+            # Delete the loading message and send the recommendations
+            await status_message.delete()
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error retrieving recommendations: {e}")
+            traceback.print_exc()
+            await status_message.delete()
+            await ctx.send("Sorry, I encountered an error while retrieving your recommendations.")

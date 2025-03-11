@@ -1,11 +1,12 @@
 import asyncio
 from sqlalchemy.orm import Session
-from db.repositories import get_recent_queries_by_user, get_wishlist_items_for_user
+from db.repositories import get_recent_queries_by_user, get_wishlist_items_for_user, delete_all_recommendations_for_user, insert_recommendation_for_user
 from services.openai_service import OpenAIService
 from prompted_response import PromptedResponse
 from config import OPENAI_API_KEY
 import json
 from datetime import datetime
+
 
 def strip_markdown(content: str) -> str:
     """Removes markdown code block delimiters from the response."""
@@ -35,13 +36,13 @@ class RecommendationService:
         try:
             print(f"[RECOMMENDATION SERVICE] Started for user {user_id} at {datetime.now()}")
             
-            # Get user's recent search history (last 5 queries)
+            # Get user's recent search history (last 20 queries)
             print(f"[RECOMMENDATION SERVICE] Fetching recent queries for user {user_id}")
-            recent_queries = get_recent_queries_by_user(db, user_id, limit=5)
+            recent_queries = get_recent_queries_by_user(db, user_id, limit=20)
             print(f"[RECOMMENDATION SERVICE] Found {len(recent_queries)} recent queries")
             
-            # Get user's wishlist items (last 5)
-            wishlist_items = get_wishlist_items_for_user(db, user_id, limit=5)
+            # Get user's wishlist items (last 20)
+            wishlist_items = get_wishlist_items_for_user(db, user_id, limit=20)
             
             # Format the data for OpenAI
             query_data = [
@@ -100,7 +101,6 @@ class RecommendationService:
             print(f"Generated recommendations: {recommended_items}")
             
             # First, delete all existing recommendations for this user
-            from db.repositories import delete_all_recommendations_for_user
             delete_all_recommendations_for_user(db, user_id)
             
             # Search for each recommended item and insert new recommendations
@@ -123,7 +123,6 @@ class RecommendationService:
                             price = 0.0
                     
                     # Insert into Supabase recommendation table (not update)
-                    from db.repositories import insert_recommendation_for_user
                     
                     insert_recommendation_for_user(
                         db,

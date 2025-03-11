@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from db.models import User, Query, RecommendedItem, Reaction
-from sqlalchemy import text
+from sqlalchemy.sql import text
 import json
+import traceback
 
 # --------------- USER REPOSITORY ---------------
 def create_or_get_user(db: Session, discord_id: str, username: str) -> User:
@@ -145,3 +146,30 @@ def insert_recommendation_for_user(db: Session, user_id: str, item_name: str, ve
         }
     )
     db.commit()
+
+def get_latest_recommendations_for_user(db: Session, user_id: str, limit: int = 6):
+    """
+    Get the most recent recommendations for a specific user from the recommendation_service_table
+    """
+    try:
+        # Use text() function to properly declare the SQL query
+        query = text("""
+            SELECT * FROM recommendation_service_table
+            WHERE user_id = :user_id
+            ORDER BY created_at DESC
+            LIMIT :limit
+        """)
+        result = db.execute(query, {"user_id": user_id, "limit": limit})
+        
+        # Fixed conversion approach for Row objects
+        recommendations = []
+        for row in result:
+            # Convert each row to a dictionary using the proper _mapping attribute
+            row_dict = {key: value for key, value in row._mapping.items()}
+            recommendations.append(row_dict)
+        
+        return recommendations
+    except Exception as e:
+        print(f"Database error in get_latest_recommendations_for_user: {e}")
+        traceback.print_exc()  
+        return []
