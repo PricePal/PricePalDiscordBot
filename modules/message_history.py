@@ -1,11 +1,11 @@
 class MessageHistory:
-    def __init__(self, max_context=5):
+    def __init__(self, max_context=1):
         self.recent_messages = {}
         self.max_context = max_context
     
     def add_message(self, channel_id, message_content):
         """Add a message to the history for a channel."""
-        if channel_id not in self.recent_messages:
+        if channel_id not in self.recent_messages:  
             self.recent_messages[channel_id] = []
             
         self.recent_messages[channel_id].append(message_content)

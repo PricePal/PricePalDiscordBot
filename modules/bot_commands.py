@@ -154,7 +154,8 @@ def register_commands(bot, db: Session):
                 )
                 await status_message.edit(embed=updated_embed)
                 
-                for item in item_set:
+                # Define an async function for search and database operations
+                async def process_item(item):
                     recommendations = await prompted_response.run_prompted_response(
                         item, 
                         region
@@ -177,18 +178,32 @@ def register_commands(bot, db: Session):
                             metadata=shopping_item.model_dump()
                         )
                         
-                        await recommended_item_embed(
-                            ctx, 
-                            None, 
-                            shopping_item.item_name, 
-                            shopping_item.price, 
-                            rec_link,
-                            query_id=new_query.id,
-                            rec_item_id=rec_item.id
-                        )
+                        return {
+                            "ctx": ctx,
+                            "shopping_item": shopping_item,
+                            "rec_link": rec_link,
+                            "query_id": new_query.id,
+                            "rec_item_id": rec_item.id
+                        }
+                    return None
                 
-                # Delete the loading message when all items are processed
+                # Run all searches and DB operations in parallel
+                results = await asyncio.gather(*[process_item(item) for item in item_set])
+                
+                # Delete the loading message
                 await status_message.delete()
+                
+                # Process results and display embeds
+                for result in [r for r in results if r]:
+                    await recommended_item_embed(
+                        result["ctx"],
+                        None,
+                        result["shopping_item"].item_name,
+                        result["shopping_item"].price,
+                        result["rec_link"],
+                        query_id=result["query_id"],
+                        rec_item_id=result["rec_item_id"]
+                    )
                 
                 # Trigger the background recommendation service
                 asyncio.create_task(recommendation_service.update_recommendations(db, user.id))

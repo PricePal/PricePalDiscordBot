@@ -17,15 +17,12 @@ class LoadingAnimations:
     # Different operations can have specific GIFs
     OPERATION_GIFS = {
         "search": [
-            "https://media.giphy.com/media/HdkzWcDvoRmLmkrWOt/giphy.gif?cid=790b76110dxwv5lkkgeftrisbm2pb8zrxvufc6n20yffsf4c&ep=v1_gifs_search&rid=giphy.gif&ct=g",  
-            "https://media.giphy.com/media/0GsNMsRwDKKMjiwIe5/giphy.gif?cid=ecf05e4760geayjg6s62hue1i97lk3s77ncro3lfi9ymu5ps&ep=v1_gifs_search&rid=giphy.gif&ct=g"   
+            "https://media.giphy.com/media/HdkzWcDvoRmLmkrWOt/giphy.gif?cid=790b76110dxwv5lkkgeftrisbm2pb8zrxvufc6n20yffsf4c&ep=v1_gifs_search&rid=giphy.gif&ct=g"   
         ],
-        "profile": [
-            "https://media.giphy.com/media/VHI6svvhu5xuqzyAoM/giphy.gif?cid=790b76112npqu5fetp6pdepqsh3ynmafgo9trlxdyu1rag4a&ep=v1_gifs_search&rid=giphy.gif&ct=g",  
+        "profile": [ 
             "https://media.giphy.com/media/3oKIPEqDGUULpEU0aQ/giphy.gif?cid=790b76112npqu5fetp6pdepqsh3ynmafgo9trlxdyu1rag4a&ep=v1_gifs_search&rid=giphy.gif&ct=g"  
         ],
-        "surprise": [
-            "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMnZ1aHkxZzBpcXdlcThqNzdpOTR2OGluOW45NWlrOWZyOWdvam45ZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/2zozXQAm0U7MrgqtZT/giphy.gif",  
+        "surprise": [  
             "https://media.giphy.com/media/1fZSFCEtRQ1gLKAeGv/giphy.gif?cid=790b7611wo9yy5qo7nsi4sx2fyvkbhaocpaebi989xfarrj5&ep=v1_gifs_search&rid=giphy.gif&ct=g"  
         ]
     }

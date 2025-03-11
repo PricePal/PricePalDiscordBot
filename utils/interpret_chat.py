@@ -1,6 +1,5 @@
-
 from openai import AsyncOpenAI
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, OPENAI_MODEL
 
 import json
 
@@ -22,7 +21,7 @@ async def interpret_chat(messages):
     """
     # Join messages into one context
     context = "\n".join(messages)
-
+    print(f"Interpret Chat Context: {context}")
     prompt = f"""
     You are a shopping assistant that extracts product search queries from chat conversations.
 
@@ -61,16 +60,17 @@ async def interpret_chat(messages):
     """
 
     try:
-        response = await client.chat.completions.create(model="gpt-4o-mini",
+        response = await client.chat.completions.create(model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": "You are a helpful shopping assistant."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=0.3)
+        temperature=0.7)
 
         result_text = response.choices[0].message.content.strip()
         query = json.loads(result_text)
+        print(f"Interpret Chat Result: {query}")
         return query
     except Exception as e:
         print(f"Interpret Chat Error: {e}")

@@ -6,20 +6,8 @@ from prompted_response import PromptedResponse
 from config import OPENAI_API_KEY
 import json
 from datetime import datetime
+import traceback
 
-
-def strip_markdown(content: str) -> str:
-    """Removes markdown code block delimiters from the response."""
-    if content.startswith("```"):
-        lines = content.splitlines()
-        # Remove the first line if it starts with ```
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        # Remove the last line if it starts with ```
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-    return content
 
 class RecommendationService:
     def __init__(self):
@@ -83,7 +71,7 @@ class RecommendationService:
                 ],
             )
             
-            content = strip_markdown(response.choices[0].message.content)
+            content = self.openai_service.strip_markdown(response.choices[0].message.content)
             recommendation_data = json.loads(content)
             recommended_items = recommendation_data.get("recommendations", [])
             
@@ -103,10 +91,11 @@ class RecommendationService:
             # First, delete all existing recommendations for this user
             delete_all_recommendations_for_user(db, user_id)
             
-            # Search for each recommended item and insert new recommendations
+            # Search for each recommended item IN PARALLEL
             region = "us"
-            for item in recommended_items:
-                # Search for the item
+            
+            # Define an async function to search and process a single item
+            async def search_and_process_item(item):
                 search_results = await self.prompted_response.run_prompted_response(
                     {"item_name": item, "number_of_results": 1},
                     region
@@ -122,23 +111,30 @@ class RecommendationService:
                         except ValueError:
                             price = 0.0
                     
-                    # Insert into Supabase recommendation table (not update)
-                    
-                    insert_recommendation_for_user(
-                        db,
-                        user_id=user_id,
-                        item_name=result.item_name,
-                        vendor=result.source if result.source else "Unknown",
-                        link=result.link if result.link else "",
-                        price=price,
-                        metadata=result.model_dump() if hasattr(result, "model_dump") else {}
-                    )
+                    return {
+                        "user_id": user_id,
+                        "item_name": result.item_name,
+                        "vendor": result.source if result.source else "Unknown",
+                        "link": result.link if result.link else "",
+                        "price": price,
+                        "metadata": result.model_dump() if hasattr(result, "model_dump") else {}
+                    }
+                return None
+            
+            # Run all searches in parallel
+            search_tasks = [search_and_process_item(item) for item in recommended_items]
+            all_results = await asyncio.gather(*search_tasks)
+            
+            # Filter out None results and insert into database
+            valid_results = [result for result in all_results if result]
+            for result in valid_results:
+                insert_recommendation_for_user(
+                    db,
+                    **result
+                )
             
             print(f"[RECOMMENDATION SERVICE] Completed successfully for user {user_id} at {datetime.now()}")
             
         except Exception as e:
-            print(f"[RECOMMENDATION SERVICE] ERROR for user {user_id}: {str(e)}")
-            # Log the full traceback for debugging
-            import traceback
-            print(traceback.format_exc())
-            # Don't raise the exception - we want this to fail silently in the background 
+            print(f"[RECOMMENDATION SERVICE] Error: {e}")
+            traceback.print_exc() 

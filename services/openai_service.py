@@ -5,24 +5,26 @@ from models.shopping_models import ShoppingItem, Recommendation, StructuredRespo
 from config import OPENAI_MODEL, REASONING_MODEL
 from db.models import Query, RecommendedItem, Reaction
 
-def strip_markdown(content: str) -> str:
-    """Removes markdown code block delimiters from the response."""
-    if content.startswith("```"):
-        lines = content.splitlines()
-        # Remove the first line if it starts with ```
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        # Remove the last line if it starts with ```
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-    return content
+
 
 class OpenAIService:
     def __init__(self, api_key: str):
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = OPENAI_MODEL
         self.reasoning_model = REASONING_MODEL
+    
+    def strip_markdown(self, content: str) -> str:
+        """Removes markdown code block delimiters from the response."""
+        if content.startswith("```"):
+            lines = content.splitlines()
+            # Remove the first line if it starts with ```
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            # Remove the last line if it starts with ```
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+        return content
 
     async def parse_query(self, query_str: str) -> Dict:
         """
@@ -204,17 +206,17 @@ class OpenAIService:
                     {"role": "user", "content": prompt},
                 ],
                 # max_completion_tokens=300,
-                temperature=0.3 
+                # temperature=0.3 
             )
 
-            # Extract the message content from the API response.
-            print(f"Response: {response}")
+            # # Extract the message content from the API response.
+            # print(f"Response: {response}")
 
             content = response.choices[0].message.content.strip()
-            print(f"Raw Content: {content}")
+            # print(f"Raw Content: {content}")
 
-            content = strip_markdown(content)
-            print(f"Cleaned Content: {content}")
+            content = self.strip_markdown(content)
+            # print(f"Cleaned Content: {content}")
 
             # Parse the JSON
             parsed = json.loads(content)
@@ -265,9 +267,9 @@ class OpenAIService:
         )
         for item in items:
             item_name = item.item_name
-            print(f"purchase_options: {purchase_options}")
+            # print(f"purchase_options: {purchase_options}")
             options = purchase_options.get(item_name, "No options found.")
-            print(f"Options: {options}")
+            # print(f"Options: {options}")
             prompt += f"Item: {item_name}\nPurchase Options:\n{options}\n\n"
 
         try:
@@ -283,13 +285,13 @@ class OpenAIService:
 
             content = response.choices[0].message.content.strip()
 
-            print(f"Raw Content: {content}")
+            # print(f"Raw Content: {content}")
 
-            content = strip_markdown(content)
-            print(f"Cleaned Content: {content}")
+            content = self.strip_markdown(content)
+            # print(f"Cleaned Content: {content}")
 
             recommendations = json.loads(content)
-            print(f"Final Recommendations: {recommendations}")
+            # print(f"Final Recommendations: {recommendations}")
             # print(recommendations)
             # Handle both a raw JSON array and a JSON object with key "results"
             if isinstance(recommendations, dict):
@@ -434,7 +436,7 @@ class OpenAIService:
                     {"role": "user", "content": prompt}
                 ],
             )
-            content = strip_markdown(response.choices[0].message.content)
+            content = self.strip_markdown(response.choices[0].message.content)
             profile_data = json.loads(content)
             return profile_data
         

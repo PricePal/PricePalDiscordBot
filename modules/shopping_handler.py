@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from db.repositories import (
     create_or_get_user, create_query, create_recommended_item
 )
+from utils.loading_animations import LoadingAnimations
 
 class ShoppingHandler:
     def __init__(self, db: Session):
@@ -37,7 +38,13 @@ class ShoppingHandler:
             return
             
         # Search and display results
-        await message.channel.send("🛒 **Detected Shopping Intent**. Searching...")
+   
+        
+        loading_embed, _ = LoadingAnimations.get_loading_embed(
+            operation="search", 
+            message="🛒 **Detected Shopping Intent**. Searching for products..."
+        )
+        status_message = await message.channel.send(embed=loading_embed)
         region = "us"
         
         # Database integration - Store user, query and recommendations
@@ -51,6 +58,7 @@ class ShoppingHandler:
             
             # Create query record
             interpreted = await self.prompted_response.parse_query(message.content)
+            print(f"Interpreted: {interpreted}")
             unprompted_query = create_query(
                 self.db,
                 user_id=user.id,
@@ -60,8 +68,12 @@ class ShoppingHandler:
             )
             
             # Get recommendations
-            recommendations = await self.prompted_response.run_prompted_response(query, region)
+            recommendations = await self.prompted_response.run_prompted_response(interpreted, region)
+            print("--------------------------------")
             print(f"Recommendations: {recommendations}")
+            print("--------------------------------")
+            # Delete the loading status message
+            await status_message.delete()
             
             if recommendations:
                 for shopping_item in recommendations:
@@ -92,6 +104,12 @@ class ShoppingHandler:
                 await message.channel.send("No recommendations found.")
         except Exception as e:
             print(f"Error in database operations: {e}")
+            # Delete the loading status message even if there was an error
+            try:
+                await status_message.delete()
+            except:
+                pass
+                
             # Still try to show recommendations without DB if there was an error
             recommendations = await self.prompted_response.run_prompted_response(query, region)
             if recommendations:
@@ -107,6 +125,3 @@ class ShoppingHandler:
                     )
             else:
                 await message.channel.send("No recommendations found.")
-
-
-
