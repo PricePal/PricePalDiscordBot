@@ -7,13 +7,15 @@ from db.repositories import (
     create_or_get_user, create_query, create_recommended_item
 )
 from utils.loading_animations import LoadingAnimations
+from typing import List
+import discord
 
 class ShoppingHandler:
     def __init__(self, db: Session):
         self.prompted_response = PromptedResponse()
         self.db = db
 
-    async def process_message(self, message, message_context, cooldown_manager):
+    async def process_message(self, message: discord.Message, context: List[str], cooldown_manager):
         """Process a message for shopping intent."""
     
         if not is_potential_shopping_message(message.content):
@@ -26,7 +28,7 @@ class ShoppingHandler:
             print("Not enough time has passed since last LLM call.")
             return
             
-        query = await interpret_chat(message_context)
+        query = await interpret_chat(context)
         
         if not query.get("item"):
             print("No item in query.")
@@ -77,29 +79,34 @@ class ShoppingHandler:
             
             if recommendations:
                 for shopping_item in recommendations:
-                    # Create recommendation record in DB
-                    rec_link = shopping_item.link if shopping_item.link is not None else ""
-                    rec_price = float(shopping_item.price.replace('$', '')) if shopping_item.price is not None else 0.0
-                    rec_item = create_recommended_item(
-                        self.db,
-                        query_id=unprompted_query.id,
-                        item_name=shopping_item.item_name,
-                        vendor="VendorX",
-                        link=rec_link,
-                        price=rec_price,
-                        metadata=shopping_item.model_dump()
-                    )
-                    
-                    # Display recommendation
-                    await recommended_item_embed(
-                        None, 
-                        message, 
-                        shopping_item.item_name, 
-                        shopping_item.price, 
-                        shopping_item.link,
-                        query_id=unprompted_query.id, 
-                        rec_item_id=rec_item.id
-                    )
+                    try:
+                        # Clean price string and convert to float
+                        price_str = shopping_item.price if shopping_item.price is not None else "0.0"
+                        price_str = price_str.replace('$', '').replace(',', '')  # Remove $ and commas
+                        rec_price = float(price_str)
+                        
+                        rec_item = create_recommended_item(
+                            self.db,
+                            query_id=unprompted_query.id,
+                            item_name=shopping_item.item_name,
+                            vendor="Unknown" if shopping_item.source is None else shopping_item.source,
+                            link=shopping_item.link if shopping_item.link is not None else "",
+                            price=rec_price,
+                            metadata=shopping_item.model_dump()
+                        )
+
+                        await recommended_item_embed(
+                            None, 
+                            message,
+                            shopping_item.item_name,
+                            shopping_item.price,
+                            shopping_item.link if shopping_item.link else "",
+                            query_id=unprompted_query.id,
+                            rec_item_id=rec_item.id
+                        )
+                    except Exception as e:
+                        print(f"Error processing recommendation: {e}")
+                        continue  # Skip this item and continue with others
             else:
                 await message.channel.send("No recommendations found.")
         except Exception as e:

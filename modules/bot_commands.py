@@ -17,6 +17,36 @@ from utils.recommendation_service import RecommendationService
 import asyncio
 import traceback
 
+def get_search_tips_embed():
+    """Returns an embed with helpful search tips"""
+    embed = discord.Embed(
+        title="💡 Tips for Better Searches",
+        description="While I'm searching, here's how to get even better results next time:",
+        color=discord.Color.teal()
+    )
+    
+    embed.add_field(
+        name="Be specific",
+        value="Include brand, model, size, or material preferences when relevant",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Mention price range",
+        value="Add 'under $X' or 'between $X-$Y' for budget-focused results",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Specify features",
+        value="Include key features like 'wireless', 'waterproof', or 'high capacity'",
+        inline=False
+    )
+    
+    embed.set_footer(text="These tips will disappear when results are ready")
+    
+    return embed
+
 def register_commands(bot, db: Session):
     # Initialize the recommendation service
     recommendation_service = RecommendationService()
@@ -35,6 +65,7 @@ def register_commands(bot, db: Session):
         
         async def do_search():
             prompted_response = PromptedResponse()
+            tips_message = None
             try:
                 # Get the user
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
@@ -46,12 +77,11 @@ def register_commands(bot, db: Session):
                 )
                 status_message = await ctx.send(embed=loading_embed)
                 
+                # Send tips while searching - SAVE THE MESSAGE REFERENCE
+                tips_message = await ctx.send(embed=get_search_tips_embed())
+                
                 # Parse the query into structured data
                 parsed_query = await prompted_response.parse_query(query)
-                # if parsed_query.get("item") is None:
-                #     await status_message.delete()
-                #     await ctx.send("Sorry, I couldn't understand what you're looking for. Please try rephrasing your query.")
-                #     return
                 
                 # Log the query
                 new_query = create_query(
@@ -65,6 +95,10 @@ def register_commands(bot, db: Session):
                 # Get product recommendations
                 region = "us"  # Default to US region
                 recommendations = await prompted_response.run_prompted_response(query, region)
+                
+                # Remove the tips message now that we have results
+                if tips_message:
+                    await tips_message.delete()
                 
                 if recommendations:
                     for shopping_item in recommendations:
@@ -100,6 +134,12 @@ def register_commands(bot, db: Session):
                 # This doesn't await the result, so it won't block execution
                 asyncio.create_task(recommendation_service.update_recommendations(db, user.id))
                 
+            except Exception as e:
+                print(f"Error in search: {e}")
+                traceback.print_exc()
+                if tips_message:
+                    await tips_message.delete()
+                await ctx.send("Sorry, I encountered an error while searching.")
             finally:
                 db.close()
         
@@ -113,13 +153,14 @@ def register_commands(bot, db: Session):
         """
         async def do_multi_search():
             prompted_response = PromptedResponse()
+            tips_message = None
             try:
                 # Log or retrieve the user
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
                 
                 # Create an embed with a loading animation
                 loading_embed, _ = LoadingAnimations.get_loading_embed(
-                    operation="search", 
+                    operation="multi_search", 
                     message=f"🛒 **Fetching complementary items for:** {query}\n\nFinding the perfect set of products that work well together..."
                 )
                 status_message = await ctx.send(embed=loading_embed)
@@ -147,12 +188,14 @@ def register_commands(bot, db: Session):
                     return
                     
                 # Update the loading message with the identified items
-
                 updated_embed, _ = LoadingAnimations.get_loading_embed(
                     operation="search",
                     message=f"🛒 **Building Your Product Set**\n\nFinding the best options for: **{', '.join(item_set)}**"
                 )
                 await status_message.edit(embed=updated_embed)
+                
+                # Send tips while building the product set - SAVE THE MESSAGE REFERENCE
+                tips_message = await ctx.send(embed=get_search_tips_embed())
                 
                 # Define an async function for search and database operations
                 async def process_item(item):
@@ -193,6 +236,10 @@ def register_commands(bot, db: Session):
                 # Delete the loading message
                 await status_message.delete()
                 
+                # Remove the tips message now that we have results
+                if tips_message:
+                    await tips_message.delete()
+                
                 # Process results and display embeds
                 for result in [r for r in results if r]:
                     await recommended_item_embed(
@@ -208,6 +255,12 @@ def register_commands(bot, db: Session):
                 # Trigger the background recommendation service
                 asyncio.create_task(recommendation_service.update_recommendations(db, user.id))
                 
+            except Exception as e:
+                print(f"Error in multi-search: {e}")
+                traceback.print_exc()
+                if tips_message:
+                    await tips_message.delete()
+                await ctx.send("Sorry, I encountered an error while searching for your product set.")
             finally:
                 db.close()
         

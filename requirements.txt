@@ -15,3 +15,8 @@ fastapi
 uvicorn
 numpy
 matplotlib
+gensim
+scipy
+scikit-learn    
+pandas
+tqdm

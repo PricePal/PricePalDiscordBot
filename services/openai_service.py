@@ -263,7 +263,7 @@ class OpenAIService:
             "Return a JSON array where each element is a JSON object with the keys: "
             "'item_name', 'price', 'link', and 'source'. "
             "If there are no options, still return each item as an element in the array, just have the item_name be the item name, and the price, link, and source be None."
-            "Return only the JSON array without any additional commentary.\n\n"
+            "Return only the JSON array without any additional commentary. This is very important, it should be a valid JSON with the key 'results' and an array of objects.\n\n"
         )
         for item in items:
             item_name = item.item_name
@@ -282,6 +282,12 @@ class OpenAIService:
                 response_format={"type": "json_object"},
                 temperature=0.3
             )
+            # response = await self.client.chat.completions.create(
+            #     model=self.reasoning_model,
+            #     messages=[
+            #         {"role": "user", "content": prompt},
+            #     ],
+            # )
 
             content = response.choices[0].message.content.strip()
 
@@ -291,7 +297,7 @@ class OpenAIService:
             # print(f"Cleaned Content: {content}")
 
             recommendations = json.loads(content)
-            # print(f"Final Recommendations: {recommendations}")
+            print(f"Final Recommendations: {recommendations}")
             # print(recommendations)
             # Handle both a raw JSON array and a JSON object with key "results"
             if isinstance(recommendations, dict):
