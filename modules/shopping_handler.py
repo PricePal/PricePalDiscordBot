@@ -35,9 +35,9 @@ class ShoppingHandler:
             return
             
         # Check if duplicate query
-        if cooldown_manager.is_duplicate_query(channel_id, query["item"]):
-            print("Same query detected; skipping new search.")
-            return
+        # if cooldown_manager.is_duplicate_query(channel_id, query["item"]):
+        #     print("Same query detected; skipping new search.")
+        #     return
             
         # Search and display results
    

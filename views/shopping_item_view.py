@@ -20,18 +20,28 @@ class ShoppingItemView(View):
 
     @discord.ui.button(label="Add to Wishlist", style=discord.ButtonStyle.success, emoji="❤️")
     async def on_wishlist_click(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        
         try:
             create_reaction(self.db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="wishlist")
-            await interaction.response.send_message("Added to your wishlist!", ephemeral=True)
+            await interaction.followup.send("Added to your wishlist!", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
             print(f"Wishlist error: {e}")
+            try:
+                await interaction.followup.send(f"Error adding to wishlist", ephemeral=True)
+            except:
+                pass
 
     @discord.ui.button(label="Dislike", style=discord.ButtonStyle.danger, emoji="👎")
     async def on_dislike_click(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        
         try:
             create_reaction(self.db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="dislike")
-            await interaction.response.send_message("You disliked this item.", ephemeral=True)
+            await interaction.followup.send("You disliked this item.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
             print(f"Dislike error: {e}")
+            try:
+                await interaction.followup.send(f"Error recording your dislike", ephemeral=True)
+            except:
+                pass

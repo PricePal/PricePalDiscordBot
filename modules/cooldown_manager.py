@@ -16,9 +16,9 @@ class CooldownManager:
         self.channel_last_called[channel_id] = now
         return True
     
-    def is_duplicate_query(self, channel_id, query):
-        """Check if this is the same query as the last one for this channel."""
-        is_duplicate = self.last_searched_query.get(channel_id) == query
-        if not is_duplicate:
-            self.last_searched_query[channel_id] = query
-        return is_duplicate
+    # def is_duplicate_query(self, channel_id, query):
+    #     """Check if this is the same query as the last one for this channel."""
+    #     is_duplicate = self.last_searched_query.get(channel_id) == query
+    #     if not is_duplicate:
+    #         self.last_searched_query[channel_id] = query
+    #     return is_duplicate
