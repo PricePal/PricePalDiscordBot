@@ -330,7 +330,7 @@ class OpenAIService:
         """
         Analyzes chat context and suggests a surprising but relevant item.
         """
-        context = "\n".join(message_context[-10:])  # Use the 10 most recent messages for context
+        context = "\n".join(message_context[-20:])  # Use the 20 most recent messages for context
 
         prompt = (
             "You are a perceptive shopping assistant with a knack for unexpected but delightful recommendations. "
