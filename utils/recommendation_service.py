@@ -20,6 +20,7 @@ class RecommendationService:
         and updates the Supabase recommendation table.
         
         This runs in the background and doesn't block the main bot functionality.
+        Note: Caller is responsible for managing the db session (closing it).
         """
         try:
             print(f"[RECOMMENDATION SERVICE] Started for user {user_id} at {datetime.now()}")
@@ -136,5 +137,7 @@ class RecommendationService:
             print(f"[RECOMMENDATION SERVICE] Completed successfully for user {user_id} at {datetime.now()}")
             
         except Exception as e:
-            print(f"[RECOMMENDATION SERVICE] Error: {e}")
-            traceback.print_exc() 
+            print(f"Error in update_recommendations: {e}")
+            db.rollback()  # Roll back on error but don't close
+            traceback.print_exc()
+            # DB should be closed by the caller 

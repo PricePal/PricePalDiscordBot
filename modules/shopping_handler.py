@@ -7,13 +7,13 @@ from db.repositories import (
     create_or_get_user, create_query, create_recommended_item
 )
 from utils.loading_animations import LoadingAnimations
-from typing import List
+from typing import List, Callable
 import discord
 
 class ShoppingHandler:
-    def __init__(self, db: Session):
+    def __init__(self, db_getter: Callable[[], Session]):
         self.prompted_response = PromptedResponse()
-        self.db = db
+        self.get_db = db_getter  # Store the factory function
 
     async def process_message(self, message: discord.Message, context: List[str], cooldown_manager):
         """Process a message for shopping intent."""
@@ -33,14 +33,6 @@ class ShoppingHandler:
         if not query.get("item"):
             print("No item in query.")
             return
-            
-        # Check if duplicate query
-        # if cooldown_manager.is_duplicate_query(channel_id, query["item"]):
-        #     print("Same query detected; skipping new search.")
-        #     return
-            
-        # Search and display results
-   
         
         loading_embed, _ = LoadingAnimations.get_loading_embed(
             operation="search", 
@@ -49,11 +41,15 @@ class ShoppingHandler:
         status_message = await message.channel.send(embed=loading_embed)
         region = "us"
         
-        # Database integration - Store user, query and recommendations
+        # Get a fresh database connection
+        db = self.get_db()
+        unprompted_query = None
+        rec_item = None
+        
         try:
             # Create or get user record
             user = create_or_get_user(
-                self.db, 
+                db, 
                 discord_id=str(message.author.id), 
                 username=message.author.name
             )
@@ -62,7 +58,7 @@ class ShoppingHandler:
             interpreted = await self.prompted_response.parse_query(message.content)
             print(f"Interpreted: {interpreted}")
             unprompted_query = create_query(
-                self.db,
+                db,
                 user_id=user.id,
                 query_type="unprompted",
                 raw_query=message.content,
@@ -86,7 +82,7 @@ class ShoppingHandler:
                         rec_price = float(price_str)
                         
                         rec_item = create_recommended_item(
-                            self.db,
+                            db,
                             query_id=unprompted_query.id,
                             item_name=shopping_item.item_name,
                             vendor="Unknown" if shopping_item.source is None else shopping_item.source,
@@ -111,24 +107,31 @@ class ShoppingHandler:
                 await message.channel.send("No recommendations found.")
         except Exception as e:
             print(f"Error in database operations: {e}")
+            db.rollback()  # Rollback on error
             # Delete the loading status message even if there was an error
             try:
                 await status_message.delete()
             except:
                 pass
                 
-            # Still try to show recommendations without DB if there was an error
-            recommendations = await self.prompted_response.run_prompted_response(query, region)
-            if recommendations:
-                for shopping_item in recommendations:
-                    await recommended_item_embed(
-                        None, 
-                        message, 
-                        shopping_item.item_name, 
-                        shopping_item.price, 
-                        shopping_item.link,
-                        query_id=unprompted_query.id,
-                        rec_item_id=rec_item.id
-                    )
-            else:
-                await message.channel.send("No recommendations found.")
+            # Still try to show recommendations without DB
+            try:
+                recommendations = await self.prompted_response.run_prompted_response(query, region)
+                if recommendations and unprompted_query and unprompted_query.id:
+                    for shopping_item in recommendations:
+                        await recommended_item_embed(
+                            None, 
+                            message, 
+                            shopping_item.item_name, 
+                            shopping_item.price, 
+                            shopping_item.link,
+                            query_id=unprompted_query.id,
+                            rec_item_id=rec_item.id if rec_item else None
+                        )
+                else:
+                    await message.channel.send("No recommendations found.")
+            except Exception as inner_e:
+                print(f"Error showing recommendations without DB: {inner_e}")
+                await message.channel.send("Sorry, I encountered an error while processing your request.")
+        finally:
+            db.close()  # Always close the connection

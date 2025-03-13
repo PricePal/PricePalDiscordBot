@@ -16,6 +16,7 @@ from utils.loading_animations import LoadingAnimations
 from utils.recommendation_service import RecommendationService
 import asyncio
 import traceback
+from typing import Callable
 
 def get_search_tips_embed():
     """Returns an embed with helpful search tips"""
@@ -47,7 +48,7 @@ def get_search_tips_embed():
     
     return embed
 
-def register_commands(bot, db: Session):
+def register_commands(bot, db_getter: Callable[[], Session]):
     # Initialize the recommendation service
     recommendation_service = RecommendationService()
 
@@ -66,6 +67,9 @@ def register_commands(bot, db: Session):
         async def do_search():
             prompted_response = PromptedResponse()
             tips_message = None
+            
+            # Get a fresh database connection
+            db = db_getter()
             try:
                 # Get the user
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
@@ -130,18 +134,20 @@ def register_commands(bot, db: Session):
                     
                 await status_message.delete()  # Remove the status message once done
                 
-                # Trigger the background recommendation service
-                # This doesn't await the result, so it won't block execution
-                asyncio.create_task(recommendation_service.update_recommendations(db, user.id))
+                # Get a fresh connection for the background task
+                bg_db = db_getter()
+                # Trigger the background recommendation service (pass the new connection)
+                asyncio.create_task(recommendation_service.update_recommendations(bg_db, user.id))
                 
             except Exception as e:
                 print(f"Error in search: {e}")
                 traceback.print_exc()
+                db.rollback()  # Roll back on error
                 if tips_message:
                     await tips_message.delete()
                 await ctx.send("Sorry, I encountered an error while searching.")
             finally:
-                db.close()
+                db.close()  # Always close the connection
         
         bot.loop.create_task(do_search())
 
@@ -156,6 +162,7 @@ def register_commands(bot, db: Session):
             tips_message = None
             try:
                 # Log or retrieve the user
+                db = db_getter()
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
                 
                 # Create an embed with a loading animation
@@ -252,8 +259,10 @@ def register_commands(bot, db: Session):
                         rec_item_id=result["rec_item_id"]
                     )
                 
-                # Trigger the background recommendation service
-                asyncio.create_task(recommendation_service.update_recommendations(db, user.id))
+                # Get a fresh connection for the background task
+                bg_db = db_getter()
+                # Trigger the background recommendation service (pass the new connection)
+                asyncio.create_task(recommendation_service.update_recommendations(bg_db, user.id))
                 
             except Exception as e:
                 print(f"Error in multi-search: {e}")
@@ -276,6 +285,7 @@ def register_commands(bot, db: Session):
         async def get_wishlist():
             try:
                 # Get the user
+                db = db_getter()
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
                 
                 # Get all wishlist items for the user
@@ -321,6 +331,7 @@ def register_commands(bot, db: Session):
             
             try:
                 # Get the user
+                db = db_getter()
                 user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
                 
                 # Get recent message history from the channel
@@ -413,6 +424,7 @@ def register_commands(bot, db: Session):
         
         try:
             # Get the user
+            db = db_getter()
             user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
             
             # Create profile analyzer
@@ -535,55 +547,63 @@ def register_commands(bot, db: Session):
         Learn what the shopping assistant can do for you.
         """
         
-        # Create an embed for the help menu
-        embed = discord.Embed(
-            title="🛍️ PricePal - Commands",
-            description="Here are all the available commands you can use:",
-            color=discord.Color.blue()
-        )
-        
-        # Get all commands from the bot
-        command_list = sorted(bot.commands, key=lambda x: x.name)
-        
-        # Add each command to the embed with improved formatting
-        for command in command_list:
-            # Skip the help command itself to avoid recursion
-            if command.name == "help":
-                continue
-            
-            # Extract the first line of the docstring as a short description
-            description = command.help.split('\n')[0] if command.help else "No description available."
-            
-            # Add command emoji based on the command name
-            emoji = "❓"  # Default emoji
-            if "find" in command.name:
-                emoji = "🔍"
-            elif command.name == "wishlist":
-                emoji = "❤️"
-            elif command.name == "wrapped":
-                emoji = "📊"
-            elif command.name == "feeling_lucky":
-                emoji = "✨"
-            elif command.name == "all_commands":
-                emoji = "👀"
-            elif command.name == "my_recs":
-                emoji = "🛍️"
-            elif command.name == "hello":
-                emoji = "👋"
-            
-            # Add field for each command with emoji and formatted name
-            embed.add_field(
-                name=f"{emoji} `!{command.name}`",
-                value=f"**{description}**",
-                inline=False
+        # Get a fresh db connection
+        db = db_getter()
+        try:
+            # Create an embed for the help menu
+            embed = discord.Embed(
+                title="🛍️ PricePal - Commands",
+                description="Here are all the available commands you can use:",
+                color=discord.Color.blue()
             )
-        
-        # Add a footer with additional info
-        embed.set_footer(text="Type !all_commands to see this message again | Use commands in this server or in DMs")
-        
-        
-        # Send the embed
-        await ctx.send(embed=embed)
+            
+            # Get all commands from the bot
+            command_list = sorted(bot.commands, key=lambda x: x.name)
+            
+            # Add each command to the embed with improved formatting
+            for command in command_list:
+                # Skip the help command itself to avoid recursion
+                if command.name == "help":
+                    continue
+                
+                # Extract the first line of the docstring as a short description
+                description = command.help.split('\n')[0] if command.help else "No description available."
+                
+                # Add command emoji based on the command name
+                emoji = "❓"  # Default emoji
+                if "find" in command.name:
+                    emoji = "🔍"
+                elif command.name == "wishlist":
+                    emoji = "❤️"
+                elif command.name == "wrapped":
+                    emoji = "📊"
+                elif command.name == "feeling_lucky":
+                    emoji = "✨"
+                elif command.name == "all_commands":
+                    emoji = "👀"
+                elif command.name == "my_recs":
+                    emoji = "🛍️"
+                elif command.name == "hello":
+                    emoji = "👋"
+                
+                # Add field for each command with emoji and formatted name
+                embed.add_field(
+                    name=f"{emoji} `!{command.name}`",
+                    value=f"**{description}**",
+                    inline=False
+                )
+            
+            # Add a footer with additional info
+            embed.set_footer(text="Type !all_commands to see this message again | Use commands in this server or in DMs")
+            
+            
+            # Send the embed
+            await ctx.send(embed=embed)
+        except Exception as e:
+            print(f"Error in all_commands: {e}")
+            db.rollback()
+        finally:
+            db.close()  # Always close the connection
 
     @bot.command(name="my_recs")
     async def my_recs(ctx: commands.Context):
@@ -601,6 +621,7 @@ def register_commands(bot, db: Session):
         
         try:
             # Get the user
+            db = db_getter()
             user = create_or_get_user(db, discord_id=str(ctx.author.id), username=ctx.author.name)
             
             # Get recommendations for this user

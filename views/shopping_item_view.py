@@ -1,6 +1,6 @@
 from discord.ui import View
 import discord
-from db.database import SessionLocal
+from db.database import get_db_session
 from db.repositories import create_reaction
 
 class ShoppingItemView(View):
@@ -12,23 +12,28 @@ class ShoppingItemView(View):
         super().__init__(timeout=180)  # Extended timeout to 3 minutes
         self.query_id = query_id
         self.rec_item_id = rec_item_id
-        self.db = SessionLocal()
         
-    def on_timeout(self):
-        self.db.close()
-        return super().on_timeout()
-
     @discord.ui.button(label="Add to Wishlist", style=discord.ButtonStyle.success, emoji="❤️")
     async def on_wishlist_click(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             # Defer the response right away to buy more time
             await interaction.response.defer(ephemeral=True)
             
-            # Create the reaction in database
-            create_reaction(self.db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="wishlist")
-            
-            # Send the confirmation message
-            await interaction.followup.send("Added to your wishlist! Use `!wishlist` to view your saved items.", ephemeral=True)
+            # Get a fresh connection for this operation
+            db = get_db_session()
+            try:
+                # Create the reaction in database
+                create_reaction(db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="wishlist")
+                db.commit()  # Explicitly commit changes
+                
+                # Send the confirmation message
+                await interaction.followup.send("Added to your wishlist! Use `!wishlist` to view your saved items.", ephemeral=True)
+            except Exception as e:
+                db.rollback()
+                print(f"Database error in wishlist: {e}")
+                await interaction.followup.send("Something went wrong adding to your wishlist. Please try again.", ephemeral=True)
+            finally:
+                db.close()  # Always close the connection
             
         except discord.errors.NotFound:  # Handle interaction timeout
             # Interaction has expired, can't respond to it
@@ -50,17 +55,6 @@ class ShoppingItemView(View):
                 pass
         except Exception as e:
             print(f"Wishlist error: {e}")
-            try:
-                # Try to give user feedback if database operation failed
-                await interaction.followup.send("Something went wrong adding to your wishlist. Please try again.", ephemeral=True)
-            except:
-                pass
-            finally:
-                # Ensure database session is properly handled in case of error
-                try:
-                    self.db.rollback()
-                except:
-                    pass
 
     @discord.ui.button(label="Dislike", style=discord.ButtonStyle.danger, emoji="👎")
     async def on_dislike_click(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -68,11 +62,21 @@ class ShoppingItemView(View):
             # Defer the response right away to buy more time
             await interaction.response.defer(ephemeral=True)
             
-            # Create the reaction in database
-            create_reaction(self.db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="dislike")
-            
-            # Send the confirmation message
-            await interaction.followup.send("You disliked this item. We'll use this to improve your recommendations!", ephemeral=True)
+            # Get a fresh connection for this operation
+            db = get_db_session()
+            try:
+                # Create the reaction in database
+                create_reaction(db, query_id=self.query_id, recommended_item_id=self.rec_item_id, reaction_type="dislike")
+                db.commit()  # Explicitly commit changes
+                
+                # Send the confirmation message
+                await interaction.followup.send("You disliked this item. We'll use this to improve your recommendations!", ephemeral=True)
+            except Exception as e:
+                db.rollback()
+                print(f"Database error in dislike: {e}")
+                await interaction.followup.send("Something went wrong recording your dislike. Please try again.", ephemeral=True)
+            finally:
+                db.close()  # Always close the connection
             
         except discord.errors.NotFound:  # Handle interaction timeout
             # Interaction has expired, can't respond to it
@@ -94,14 +98,3 @@ class ShoppingItemView(View):
                 pass
         except Exception as e:
             print(f"Dislike error: {e}")
-            try:
-                # Try to give user feedback if database operation failed
-                await interaction.followup.send("Something went wrong recording your dislike. Please try again.", ephemeral=True)
-            except:
-                pass
-            finally:
-                # Ensure database session is properly handled in case of error
-                try:
-                    self.db.rollback()
-                except:
-                    pass
