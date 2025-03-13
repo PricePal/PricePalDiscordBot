@@ -9,7 +9,7 @@ class ShoppingItemView(View):
     """
     
     def __init__(self, query_id: str, rec_item_id: str):
-        super().__init__(timeout=180)  # Extended timeout to 3 minutes
+        super().__init__(timeout=None)  
         self.query_id = query_id
         self.rec_item_id = rec_item_id
         
@@ -28,6 +28,7 @@ class ShoppingItemView(View):
                 
                 # Send the confirmation message
                 await interaction.followup.send("Added to your wishlist! Use `!wishlist` to view your saved items.", ephemeral=True)
+                print(f"Added to wishlist: {self.rec_item_id}")
             except Exception as e:
                 db.rollback()
                 print(f"Database error in wishlist: {e}")
