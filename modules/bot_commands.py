@@ -630,7 +630,7 @@ def register_commands(bot, db_getter: Callable[[], Session]):
             if not recommendations:
                 
                     await status_message.delete()
-                    await ctx.send("I couldn't find enough shopping history to generate recommendations. Try using the `!find` command to search for some products first!")
+                    await ctx.send("I don't have any recommendations for you at the moment. This could be because you're new, your new recommendations are still being generated, or we need more shopping history. Try using the `!find` command to search for some products!")
                     return
             
             # Create an embed for the recommendations
