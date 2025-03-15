@@ -76,7 +76,7 @@ async def recommended_item_embed(ctx: commands.Context | None, message: discord.
     # Add timestamp for freshness
     embed.timestamp = discord.utils.utcnow()
     
-    embed.set_footer(text="Go to pricepal.pro to view your personalized recommendations and your wishlist.")
+    embed.set_footer(text="Visit pricepal.pro for your personalized recommendations and wishlist.")
 
     view = ShoppingItemView(query_id, rec_item_id)
     

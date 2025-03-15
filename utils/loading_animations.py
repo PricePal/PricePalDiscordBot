@@ -15,8 +15,7 @@ class LoadingAnimations:
     # Different operations can have specific GIFs
     OPERATION_GIFS = {
         "search": [
-            "https://media.giphy.com/media/HdkzWcDvoRmLmkrWOt/giphy.gif?cid=790b76110dxwv5lkkgeftrisbm2pb8zrxvufc6n20yffsf4c&ep=v1_gifs_search&rid=giphy.gif&ct=g",
-            "https://media.giphy.com/media/jAYUbVXgESSti/giphy.gif?cid=790b7611haak20n6f1d7jh0ftj7bf2dwzli7jsnbtyw2visa&ep=v1_gifs_search&rid=giphy.gif&ct=g",  
+            "https://media.giphy.com/media/HdkzWcDvoRmLmkrWOt/giphy.gif?cid=790b76110dxwv5lkkgeftrisbm2pb8zrxvufc6n20yffsf4c&ep=v1_gifs_search&rid=giphy.gif&ct=g", 
             "https://media.giphy.com/media/6xEEzPgehze0DBsyX6/giphy.gif?cid=790b76115nqwbytrqi5tynhh40jv39lppynig6e3fggyeily&ep=v1_gifs_search&rid=giphy.gif&ct=g"     
         ],
         "profile": [ 
